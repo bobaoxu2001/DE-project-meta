@@ -1,0 +1,68 @@
+# Pipeline Configuration
+# Meta Product Analytics Data Pipeline
+
+database:
+  path: "data/warehouse/product_analytics.duckdb"
+  schema: "analytics"
+
+data_generation:
+  num_users: 100000
+  num_days: 90
+  events_per_user_per_day:
+    min: 1
+    max: 50
+  platforms:
+    - facebook
+    - instagram
+    - messenger
+    - whatsapp
+    - threads
+  event_types:
+    - app_open
+    - content_view
+    - content_create
+    - like
+    - comment
+    - share
+    - message_sent
+    - story_view
+    - story_create
+    - ad_impression
+    - ad_click
+    - search
+    - profile_view
+    - notification_open
+    - session_end
+
+etl:
+  batch_size: 50000
+  parallel_workers: 4
+  retry_attempts: 3
+  retry_delay_seconds: 60
+
+data_quality:
+  null_threshold: 0.01          # Max 1% nulls allowed
+  duplicate_threshold: 0.001    # Max 0.1% duplicates
+  freshness_hours: 24           # Data must be less than 24h old
+  row_count_min: 1000           # Minimum rows per partition
+
+analytics:
+  retention_windows: [1, 3, 7, 14, 30]   # Days
+  cohort_period: "weekly"
+  growth_metrics:
+    - dau
+    - wau
+    - mau
+    - dau_mau_ratio
+    - l7_engagement
+    - new_user_retention
+
+visualization:
+  dashboard_port: 8050
+  theme: "plotly_dark"
+  refresh_interval_seconds: 300
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/pipeline.log"
