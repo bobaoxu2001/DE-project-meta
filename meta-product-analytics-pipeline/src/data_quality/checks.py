@@ -16,7 +16,7 @@ Inspired by industry-standard DQ frameworks (Great Expectations, dbt tests).
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 import duckdb
@@ -149,7 +149,7 @@ class DataQualityChecker:
             return result
 
         latest = pd.to_datetime(result_row[0])
-        age_hours = (datetime.utcnow() - latest).total_seconds() / 3600
+        age_hours = (datetime.now(timezone.utc).replace(tzinfo=None) - latest).total_seconds() / 3600
 
         status = CheckStatus.PASSED if age_hours <= max_hours else CheckStatus.FAILED
 

@@ -12,7 +12,7 @@ Implements:
 
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -62,7 +62,7 @@ class Transformer:
         events_df = events_df[events_df["event_type"].isin(valid_events)]
 
         # 5. Remove future-dated events
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         events_df = events_df[events_df["event_timestamp"] <= now]
 
         final_count = len(events_df)

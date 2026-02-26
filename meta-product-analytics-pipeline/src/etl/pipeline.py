@@ -8,7 +8,7 @@ Supports both full-refresh and incremental execution modes.
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.data_quality.checks import DataQualityChecker
 from src.etl.extract import Extractor
@@ -49,7 +49,7 @@ class ProductAnalyticsPipeline:
         start_time = time.time()
         report = {
             "pipeline": "full_refresh",
-            "started_at": datetime.utcnow().isoformat(),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "steps": {},
         }
 
@@ -175,9 +175,11 @@ class ProductAnalyticsPipeline:
             f"DELETE FROM analytics.agg_daily_metrics WHERE date_key = '{date_str}'"
         )
         if not daily_agg.empty:
+            warehouse.conn.register("__daily_agg", daily_agg)
             warehouse.conn.execute(
-                "INSERT INTO analytics.agg_daily_metrics SELECT * FROM daily_agg"
+                "INSERT INTO analytics.agg_daily_metrics SELECT * FROM __daily_agg"
             )
+            warehouse.conn.unregister("__daily_agg")
 
         elapsed = round(time.time() - start_time, 2)
         warehouse.close()

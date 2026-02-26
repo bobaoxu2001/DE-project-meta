@@ -45,13 +45,17 @@ class Loader:
 
         if mode == "replace":
             self.conn.execute(f"DELETE FROM {table_name}")
+            self.conn.register("__load_df", df)
             self.conn.execute(
-                f"INSERT INTO {table_name} SELECT * FROM df"
+                f"INSERT INTO {table_name} SELECT * FROM __load_df"
             )
+            self.conn.unregister("__load_df")
         elif mode == "append":
+            self.conn.register("__load_df", df)
             self.conn.execute(
-                f"INSERT INTO {table_name} SELECT * FROM df"
+                f"INSERT INTO {table_name} SELECT * FROM __load_df"
             )
+            self.conn.unregister("__load_df")
         elif mode == "upsert":
             if key_column is None:
                 raise ValueError("key_column required for upsert mode")
@@ -99,9 +103,11 @@ class Loader:
                 f"DELETE FROM {table_name} WHERE _partition_date = '{partition_date}'"
             )
 
+        self.conn.register("__load_df", df)
         self.conn.execute(
-            f"INSERT INTO {table_name} SELECT * FROM df"
+            f"INSERT INTO {table_name} SELECT * FROM __load_df"
         )
+        self.conn.unregister("__load_df")
 
         count = self.conn.execute(
             f"SELECT COUNT(*) FROM {table_name}"
@@ -119,7 +125,9 @@ class Loader:
         """Load aggregate table (full replace)."""
         logger.info("Loading %d aggregate rows into %s...", len(df), table_name)
         self.conn.execute(f"DELETE FROM {table_name}")
-        self.conn.execute(f"INSERT INTO {table_name} SELECT * FROM df")
+        self.conn.register("__load_df", df)
+        self.conn.execute(f"INSERT INTO {table_name} SELECT * FROM __load_df")
+        self.conn.unregister("__load_df")
 
         count = self.conn.execute(
             f"SELECT COUNT(*) FROM {table_name}"

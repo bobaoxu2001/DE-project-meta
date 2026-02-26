@@ -205,6 +205,10 @@ class EventGenerator:
         self.event_names = event_names
         self.event_probs = event_probs
 
+        # Pre-compute normalized hour probability vector
+        hour_weights = np.array([_hour_weight(h) for h in range(24)])
+        self.hour_probs = hour_weights / hour_weights.sum()
+
     def _events_for_day(self, date: datetime) -> pd.DataFrame:
         """Generate all events for a single day."""
         dow = date.weekday()
@@ -230,7 +234,7 @@ class EventGenerator:
             # Pick hours weighted by usage pattern
             hours = self.rng.choice(
                 24, size=n_events,
-                p=[_hour_weight(h) for h in range(24)],
+                p=self.hour_probs,
             )
             minutes = self.rng.integers(0, 60, size=n_events)
             seconds = self.rng.integers(0, 60, size=n_events)

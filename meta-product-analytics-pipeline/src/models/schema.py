@@ -32,10 +32,14 @@ class WarehouseSchema:
         with open(ddl_path, "r") as f:
             ddl = f.read()
 
-        # Execute each statement
-        for stmt in ddl.split(";"):
-            stmt = stmt.strip()
-            if stmt and not stmt.startswith("--"):
+        # Execute each statement, stripping comment lines first
+        for raw_stmt in ddl.split(";"):
+            lines = [
+                line for line in raw_stmt.split("\n")
+                if not line.strip().startswith("--")
+            ]
+            stmt = "\n".join(lines).strip()
+            if stmt:
                 try:
                     self.conn.execute(stmt)
                 except Exception as e:
