@@ -15,6 +15,7 @@ Panels:
 """
 
 import logging
+import re
 
 import duckdb
 import pandas as pd
@@ -22,7 +23,18 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from src import config as cfg
+
 logger = logging.getLogger(__name__)
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _validate_date(date_str: str) -> str:
+    """Validate date string format to prevent SQL injection."""
+    if not _DATE_RE.match(date_str):
+        raise ValueError(f"Invalid date format: {date_str!r} (expected YYYY-MM-DD)")
+    return date_str
 
 
 class AnalyticsDashboard:
@@ -36,10 +48,11 @@ class AnalyticsDashboard:
         "threads": "#000000",
     }
 
-    THEME = "plotly_dark"
-
-    def __init__(self, db_path: str = "data/warehouse/product_analytics.duckdb"):
+    def __init__(self, db_path: str | None = None):
+        if db_path is None:
+            db_path = cfg.get("database", "path", "data/warehouse/product_analytics.duckdb")
         self.conn = duckdb.connect(db_path, read_only=True)
+        self.THEME = cfg.get("visualization", "theme", "plotly_dark")
 
     def close(self):
         self.conn.close()
@@ -133,6 +146,7 @@ class AnalyticsDashboard:
 
     def plot_engagement_funnel(self, report_date: str) -> go.Figure:
         """Funnel: viewers → likers → commenters → sharers → creators."""
+        _validate_date(report_date)
         df = self.conn.execute(f"""
             SELECT
                 COUNT(DISTINCT CASE WHEN event_type_key = 'content_view'
@@ -169,12 +183,14 @@ class AnalyticsDashboard:
     # 4. Retention Heatmap
     # ------------------------------------------------------------------
 
-    def plot_retention_heatmap(self) -> go.Figure:
-        """Weekly cohort retention heatmap."""
-        df = self.conn.execute("""
+    def plot_retention_heatmap(self, platform: str = "facebook") -> go.Figure:
+        """Weekly cohort retention heatmap for a given platform."""
+        if platform not in self.COLORS:
+            raise ValueError(f"Unknown platform: {platform!r}")
+        df = self.conn.execute(f"""
             SELECT cohort_week, weeks_since_signup, retention_rate
             FROM analytics.agg_retention_cohorts
-            WHERE platform_key = 'facebook'
+            WHERE platform_key = '{platform}'
             ORDER BY cohort_week, weeks_since_signup
         """).fetchdf()
 
@@ -199,7 +215,7 @@ class AnalyticsDashboard:
             hovertemplate="Cohort: %{y}<br>Week: %{x}<br>Retention: %{z:.1f}%<extra></extra>",
         ))
         fig.update_layout(
-            title="Weekly Cohort Retention (Facebook)",
+            title=f"Weekly Cohort Retention ({platform.title()})",
             xaxis_title="Weeks Since Signup",
             yaxis_title="Cohort Week",
             template=self.THEME,
@@ -331,6 +347,8 @@ class AnalyticsDashboard:
         Returns list of output file paths.
         """
         import os
+
+        _validate_date(report_date)
         os.makedirs(output_dir, exist_ok=True)
 
         charts = {
