@@ -96,6 +96,18 @@ class ProductAnalyticsPipeline:
         # -- Step 4: Load --
         logger.info("[4/6] Loading into warehouse...")
 
+        # Clear fact/aggregate tables first to avoid FK constraint violations
+        for tbl in [
+            "analytics.agg_user_engagement",
+            "analytics.agg_retention_cohorts",
+            "analytics.agg_daily_metrics",
+            "analytics.fct_events",
+        ]:
+            try:
+                warehouse.conn.execute(f"DELETE FROM {tbl}")
+            except Exception:
+                pass
+
         loader.load_dimension(user_dim, "analytics.dim_users", mode="replace")
         loader.load_facts(fact_events, "analytics.fct_events")
 
