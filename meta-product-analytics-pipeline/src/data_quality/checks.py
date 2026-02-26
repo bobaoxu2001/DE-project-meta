@@ -22,6 +22,8 @@ from enum import Enum
 import duckdb
 import pandas as pd
 
+from src import config as cfg
+
 logger = logging.getLogger(__name__)
 
 
@@ -269,14 +271,18 @@ class DataQualityChecker:
         logger.info("RUNNING DATA QUALITY CHECKS")
         logger.info("=" * 50)
 
+        dq_cfg = cfg.get("data_quality", default={})
+        null_threshold = dq_cfg.get("null_threshold", 0.01)
+        min_rows = dq_cfg.get("row_count_min", 1000)
+
         self.results = []
 
         # --- Fact table checks ---
-        self.check_row_count("analytics.fct_events", min_rows=1000)
+        self.check_row_count("analytics.fct_events", min_rows=min_rows)
         self.check_uniqueness("analytics.fct_events", "event_id")
-        self.check_null_rate("analytics.fct_events", "user_key")
-        self.check_null_rate("analytics.fct_events", "event_type_key")
-        self.check_null_rate("analytics.fct_events", "date_key")
+        self.check_null_rate("analytics.fct_events", "user_key", threshold=null_threshold)
+        self.check_null_rate("analytics.fct_events", "event_type_key", threshold=null_threshold)
+        self.check_null_rate("analytics.fct_events", "date_key", threshold=null_threshold)
 
         # Referential integrity
         self.check_referential_integrity(

@@ -23,11 +23,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def main():
+    from src import config as cfg
+
+    gen_cfg = cfg.get("data_generation", default={})
+    default_users = gen_cfg.get("num_users", 5000)
+    default_days = gen_cfg.get("num_days", 30)
+
     parser = argparse.ArgumentParser(
         description="Run the Product Analytics Data Pipeline end-to-end"
     )
-    parser.add_argument("--users", type=int, default=5000, help="Number of users to generate")
-    parser.add_argument("--days", type=int, default=30, help="Number of days of event data")
+    parser.add_argument("--users", type=int, default=default_users, help="Number of users to generate")
+    parser.add_argument("--days", type=int, default=default_days, help="Number of days of event data")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--skip-viz", action="store_true", help="Skip visualization generation")
     parser.add_argument("--output", type=str, default="data", help="Base output directory")
