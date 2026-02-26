@@ -240,6 +240,10 @@ class Transformer:
         d28_start = report_dt - timedelta(days=27)
 
         fact_df = fact_df.copy()
+        if fact_df.empty:
+            logger.warning("No events in 28-day window for %s", report_dt)
+            return pd.DataFrame()
+
         fact_df["date_key"] = pd.to_datetime(fact_df["date_key"]).apply(
             lambda x: x.date() if hasattr(x, "date") else x
         )
