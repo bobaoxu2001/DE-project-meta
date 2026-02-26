@@ -12,7 +12,10 @@ cd meta-product-analytics-pipeline
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the full pipeline (~1.3s for 500 users × 7 days)
+# Production scale (10K users × 90 days → 5.7M events, 1.4 GB, ~2 min)
+python3 run_pipeline.py
+
+# Quick demo (~1.3s)
 python3 run_pipeline.py --users 500 --days 7
 
 # Run tests (60 tests)

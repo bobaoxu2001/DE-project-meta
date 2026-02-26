@@ -79,14 +79,17 @@ pip install -r requirements.txt
 ### Run the Full Pipeline
 
 ```bash
-# Generate data + ETL + Analytics + Dashboards (defaults from pipeline_config.yaml)
+# Production scale (10K users, 90 days, ~5.7M events, ~2 min)
 python3 run_pipeline.py
 
 # Quick demo (500 users, 7 days, ~21K events, ~1.3s)
 python3 run_pipeline.py --users 500 --days 7
 
+# Medium scale with visualizations
+python3 run_pipeline.py --users 5000 --days 30
+
 # Skip visualization generation
-python3 run_pipeline.py --users 1000 --days 7 --skip-viz
+python3 run_pipeline.py --users 10000 --days 90 --skip-viz
 ```
 
 ### Run Tests
@@ -289,15 +292,19 @@ The `sql/` directory contains production-quality analytical queries:
 
 ---
 
-## Performance
+## Performance & Scale
 
-| Metric | Value |
-|--------|-------|
-| 500 users × 7 days pipeline | ~1.3s end-to-end |
-| Event generation | Vectorized NumPy (no `iterrows()`) |
-| Daily aggregates | Vectorized `groupby().agg()` |
-| DuckDB queries | Columnar storage with auto-optimization |
-| Test suite (60 tests) | ~5.5s |
+| Scale | Users | Days | Events | Raw Data | Warehouse | Time |
+|-------|-------|------|--------|----------|-----------|------|
+| **Quick demo** | 500 | 7 | 21K | 1.3 MB | 10 MB | ~1.3s |
+| **Medium** | 5,000 | 30 | 1M+ | 45 MB | 160 MB | ~15s |
+| **Production** | 10,000 | 90 | 5.7M | 305 MB | 1.1 GB | ~2 min |
+| **Large** | 50,000 | 90 | 30M+ | 1.5 GB | 6+ GB | ~15 min |
+
+- **Event generation**: Vectorized NumPy (no `iterrows()`) — 64K events/day/sec
+- **Daily aggregates**: Vectorized `groupby().agg()` instead of manual loops
+- **DuckDB**: Columnar storage with automatic query optimization
+- **Test suite**: 60 tests in ~5.5s
 
 ---
 
@@ -323,13 +330,12 @@ The `sql/` directory contains production-quality analytical queries:
 ============================================================
   PRODUCT ANALYTICS PIPELINE — COMPLETE
 ============================================================
-  Users generated:    500
-  Days of data:       7
-  Total events:       21,186
+  Users generated:    10,000
+  Days of data:       90
+  Total events:       5,725,239
   Data quality:       100.0% (17/17 checks passed)
-  Total time:         1.24s
+  Total time:         114.06s
   Warehouse:          data/warehouse/product_analytics.duckdb
-  Charts:             data/processed/charts/
 ============================================================
 ```
 

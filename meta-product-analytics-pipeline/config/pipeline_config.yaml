@@ -1,12 +1,15 @@
 # Pipeline Configuration
 # Meta Product Analytics Data Pipeline
+#
+# Default: 10K users × 90 days → ~5.7M events, ~1.4 GB total
+# Quick demo: python3 run_pipeline.py --users 500 --days 7
 
 database:
   path: "data/warehouse/product_analytics.duckdb"
   schema: "analytics"
 
 data_generation:
-  num_users: 100000
+  num_users: 10000
   num_days: 90
   events_per_user_per_day:
     min: 1

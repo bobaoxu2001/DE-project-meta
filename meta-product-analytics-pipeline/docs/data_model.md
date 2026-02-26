@@ -4,10 +4,13 @@
 
 This document describes the dimensional data model for the Product Analytics warehouse. The model follows a **Kimball star schema** design optimized for analytical query patterns typical of social media product analytics.
 
+**Scale**: 10K users × 90 days → **5.7M+ events**, 1.1 GB DuckDB warehouse, 305 MB Parquet data lake.
+
 ## Fact Table
 
 ### `fct_events`
-**Grain**: One row per user interaction event
+**Grain**: One row per user interaction event  
+**Volume**: ~5.7M rows (10K users × 90 days) — ~64K events/day
 
 | Column | Type | Description |
 |--------|------|-------------|
