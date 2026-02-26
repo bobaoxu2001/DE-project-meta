@@ -162,38 +162,60 @@ class Transformer:
         """Compute pre-aggregated daily metrics per platform."""
         logger.info("Computing daily aggregates...")
 
-        # Merge signup_date from user dim
         user_signup = user_dim[["user_key", "signup_date"]].copy()
         merged = fact_df.merge(user_signup, on="user_key", how="left")
 
-        results = []
-        for (date_key, platform_key), group in merged.groupby(
-            ["date_key", "platform_key"]
-        ):
-            agg = {
-                "date_key": date_key,
-                "platform_key": platform_key,
-                "dau": group["user_key"].nunique(),
-                "new_users": group[
-                    group["signup_date"] == date_key
-                ]["user_key"].nunique(),
-                "total_events": len(group),
-                "total_sessions": group["session_id"].nunique(),
-                "content_creates": (group["event_type_key"] == "content_create").sum(),
-                "likes": (group["event_type_key"] == "like").sum(),
-                "comments": (group["event_type_key"] == "comment").sum(),
-                "shares": (group["event_type_key"] == "share").sum(),
-                "messages_sent": (group["event_type_key"] == "message_sent").sum(),
-                "ad_impressions": (group["event_type_key"] == "ad_impression").sum(),
-                "ad_clicks": (group["event_type_key"] == "ad_click").sum(),
-            }
-            n_sessions = agg["total_sessions"]
-            agg["avg_session_events"] = round(
-                agg["total_events"] / n_sessions if n_sessions > 0 else 0, 2
-            )
-            results.append(agg)
+        group_keys = ["date_key", "platform_key"]
 
-        agg_df = pd.DataFrame(results)
+        # Flag columns for vectorized counting
+        merged["_is_new"] = merged["signup_date"] == merged["date_key"]
+        merged["_is_content_create"] = merged["event_type_key"] == "content_create"
+        merged["_is_like"] = merged["event_type_key"] == "like"
+        merged["_is_comment"] = merged["event_type_key"] == "comment"
+        merged["_is_share"] = merged["event_type_key"] == "share"
+        merged["_is_message"] = merged["event_type_key"] == "message_sent"
+        merged["_is_ad_imp"] = merged["event_type_key"] == "ad_impression"
+        merged["_is_ad_click"] = merged["event_type_key"] == "ad_click"
+
+        grouped = merged.groupby(group_keys)
+
+        agg_df = grouped.agg(
+            dau=("user_key", "nunique"),
+            total_events=("event_id", "count"),
+            total_sessions=("session_id", "nunique"),
+            content_creates=("_is_content_create", "sum"),
+            likes=("_is_like", "sum"),
+            comments=("_is_comment", "sum"),
+            shares=("_is_share", "sum"),
+            messages_sent=("_is_message", "sum"),
+            ad_impressions=("_is_ad_imp", "sum"),
+            ad_clicks=("_is_ad_click", "sum"),
+        ).reset_index()
+
+        # New users: count distinct user_key where signup_date == date_key
+        new_users = (
+            merged[merged["_is_new"]]
+            .groupby(group_keys)["user_key"]
+            .nunique()
+            .reset_index(name="new_users")
+        )
+        agg_df = agg_df.merge(new_users, on=group_keys, how="left")
+        agg_df["new_users"] = agg_df["new_users"].fillna(0).astype(int)
+
+        agg_df["avg_session_events"] = np.where(
+            agg_df["total_sessions"] > 0,
+            (agg_df["total_events"] / agg_df["total_sessions"]).round(2),
+            0.0,
+        )
+
+        # Ensure column order matches the warehouse schema
+        columns = [
+            "date_key", "platform_key", "dau", "new_users", "total_events",
+            "total_sessions", "content_creates", "likes", "comments", "shares",
+            "messages_sent", "ad_impressions", "ad_clicks", "avg_session_events",
+        ]
+        agg_df = agg_df[columns]
+
         logger.info("Daily aggregates computed: %d rows", len(agg_df))
         return agg_df
 
