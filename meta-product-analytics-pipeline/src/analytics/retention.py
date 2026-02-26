@@ -42,8 +42,7 @@ class RetentionAnalytics:
         for n in retention_days:
             cases.append(f"""
                 COUNT(DISTINCT CASE
-                    WHEN a.date_key BETWEEN nu.cohort_date + INTERVAL '{n} days'
-                                        AND nu.cohort_date + INTERVAL '{n} days'
+                    WHEN a.date_key = nu.cohort_date + INTERVAL '{n} days'
                     THEN nu.user_key END) AS retained_d{n}
             """)
 

@@ -7,10 +7,13 @@ Supports both full-refresh and incremental execution modes.
 
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 
 import duckdb
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 from src.data_quality.checks import DataQualityChecker
 from src.etl.extract import Extractor
@@ -160,11 +163,13 @@ class ProductAnalyticsPipeline:
 
         Only processes events for the given date partition.
         """
+        if not _DATE_RE.match(date_str):
+            raise ValueError(f"Invalid date format: {date_str!r}")
+
         start_time = time.time()
         logger.info("Running incremental pipeline for %s", date_str)
 
         warehouse = WarehouseSchema(self.db_path)
-        # Don't re-initialize schema for incremental
         loader = Loader(warehouse.conn)
 
         # Extract single day
@@ -184,9 +189,8 @@ class ProductAnalyticsPipeline:
 
         # Recompute daily aggregates for this date
         daily_agg = self.transformer.compute_daily_aggregates(fact_events, user_dim)
-        # Append instead of full replace for aggregates
         warehouse.conn.execute(
-            f"DELETE FROM analytics.agg_daily_metrics WHERE date_key = '{date_str}'"
+            f"DELETE FROM analytics.agg_daily_metrics WHERE date_key = DATE '{date_str}'"
         )
         if not daily_agg.empty:
             warehouse.conn.register("__daily_agg", daily_agg)

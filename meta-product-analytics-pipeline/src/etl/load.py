@@ -6,6 +6,7 @@ Supports full-refresh and incremental loading strategies.
 """
 
 import logging
+import re
 from typing import Literal
 
 import duckdb
@@ -13,6 +14,21 @@ from duckdb import CatalogException, ParserException
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_.]*$")
+
+
+def _validate_date(val: str) -> str:
+    if not _DATE_RE.match(val):
+        raise ValueError(f"Invalid date format: {val!r}")
+    return val
+
+
+def _validate_identifier(val: str) -> str:
+    if not _IDENT_RE.match(val):
+        raise ValueError(f"Invalid SQL identifier: {val!r}")
+    return val
 
 
 class Loader:
@@ -60,7 +76,7 @@ class Loader:
         elif mode == "upsert":
             if key_column is None:
                 raise ValueError("key_column required for upsert mode")
-            # Delete existing rows that match incoming keys
+            _validate_identifier(key_column)
             temp_name = f"__temp_{table_name.split('.')[-1]}"
             self.conn.register(temp_name, df)
             self.conn.execute(
@@ -96,12 +112,13 @@ class Loader:
             Number of rows loaded.
         """
         if partition_date:
+            _validate_date(partition_date)
             logger.info(
                 "Incremental load: replacing partition %s in %s",
                 partition_date, table_name,
             )
             self.conn.execute(
-                f"DELETE FROM {table_name} WHERE _partition_date = '{partition_date}'"
+                f"DELETE FROM {table_name} WHERE _partition_date = DATE '{partition_date}'"
             )
 
         self.conn.register("__load_df", df)

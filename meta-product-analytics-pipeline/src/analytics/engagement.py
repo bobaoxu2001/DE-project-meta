@@ -13,6 +13,7 @@ import logging
 from datetime import timedelta
 
 import duckdb
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,11 @@ class EngagementAnalytics:
 
         if not df.empty:
             df["dau_7d_ma"] = df["dau"].rolling(7, min_periods=1).mean().round(0)
-            df["events_per_dau"] = (df["total_events"] / df["dau"]).round(1)
+            df["events_per_dau"] = np.where(
+                df["dau"] > 0,
+                (df["total_events"] / df["dau"]).round(1),
+                0.0,
+            )
 
         return df
 

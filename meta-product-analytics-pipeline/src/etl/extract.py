@@ -66,13 +66,13 @@ class Extractor:
                 filtered.append(fp)
             files = filtered
 
+        if not files:
+            logger.warning("No matching event files after date filtering")
+            return pd.DataFrame()
+
         logger.info("Reading %d event partition(s)...", len(files))
 
-        dfs = []
-        for fp in files:
-            df = pd.read_parquet(fp)
-            dfs.append(df)
-
+        dfs = [pd.read_parquet(fp) for fp in files]
         result = pd.concat(dfs, ignore_index=True)
         logger.info("Extracted %d total event records", len(result))
         return result
