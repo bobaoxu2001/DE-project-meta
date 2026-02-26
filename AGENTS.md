@@ -15,13 +15,25 @@ All commands run from `meta-product-analytics-pipeline/`:
 - **Run tests:** `python3 -m pytest tests/ -v`
 - **Lint:** No linter configured in the repo
 
-### Known issues
-
-- **Probability bug in `src/data_generation/generate_events.py`:** The `_hour_weight()` function returns weights that sum to ~1.10 instead of 1.0, causing `ValueError: probabilities do not sum to 1` when running the pipeline or most tests. This is a pre-existing code bug, not an environment issue.
-- **Schema initialization failures in tests:** `WarehouseSchema.initialize()` silently skips DDL/index creation statements that reference tables not yet created, causing cascading test failures.
-
 ### Environment notes
 
 - Python 3.12.3 is available system-wide as `python3` (not `python`).
 - Pip installs to `~/.local/` — ensure `$HOME/.local/bin` is on `PATH`.
 - `great-expectations` and `apache-airflow` are not imported by the core pipeline; they are only used by the optional Airflow DAG and are listed as development/production dependencies.
+
+### Skills
+
+Skill files in `.cursor/skills/` document SOPs for common tasks:
+
+| Skill | File | Use when |
+|-------|------|----------|
+| Run Pipeline | `run_pipeline.md` | Running the full ETL pipeline end-to-end |
+| Run Tests | `run_tests.md` | Running or writing tests |
+| Debug Data Quality | `debug_data_quality.md` | Investigating DQ failures or data issues |
+| ETL Development | `etl_development.md` | Modifying the ETL pipeline or data model |
+| Analytics Queries | `analytics_queries.md` | Running analytics or building dashboards |
+
+### DuckDB patterns
+
+- **DataFrame registration**: Always register DataFrames before using them in DuckDB SQL: `conn.register("name", df)` → use in SQL → `conn.unregister("name")`.
+- **Schema initialization**: The DDL parser in `schema.py` strips `--` comment lines before executing each statement block. If you add new SQL files, keep comments on their own lines (not inline with SQL).
