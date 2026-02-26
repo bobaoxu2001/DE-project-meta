@@ -9,26 +9,42 @@ A production-grade data engineering project that builds an end-to-end analytics 
 ## Architecture
 
 ```
-Data Lake (Parquet)  →  ETL Pipeline  →  Star Schema (DuckDB)  →  Analytics & Dashboards
-     ↑                      ↑                    ↑                        ↑
- Synthetic data       Extract/Transform     Dimensional Model      Plotly Interactive
- 100K+ users          /Load/Validate        Fact + Dimensions      Charts & Notebooks
- Millions of events   Incremental loads     SCD Type 2             7+ Dashboard Panels
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                      Product Analytics Pipeline                              │
+│                                                                              │
+│   Synthetic Data ──▶ Data Lake ──▶ ETL Pipeline ──▶ Star Schema (DuckDB)    │
+│   (Faker + NumPy)    (Parquet)     (Extract /       (Kimball Model)          │
+│   100K+ users        Partitioned    Transform /      Fact + Dimensions       │
+│   Millions events    by date        Load + DQ)       + Aggregates            │
+│                                        │                    │                │
+│                                        ▼                    ▼                │
+│                                   Data Quality         Analytics Layer       │
+│                                   17+ checks           ┌──────────────┐     │
+│                                   (completeness,       │ Engagement   │     │
+│                                    uniqueness,         │ Growth       │     │
+│                                    freshness,          │ Retention    │     │
+│                                    RI, ranges)         └──────┬───────┘     │
+│                                                               ▼             │
+│                                                        7 Plotly Charts      │
+│                                                        (DAU, Funnels,       │
+│                                                         Heatmaps, Geo)      │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Components
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **Data Generation** | Python, Faker, NumPy | Realistic synthetic event data for 5 platforms |
+| **Data Generation** | Python, Faker, NumPy (vectorized) | Realistic synthetic event data for 5 platforms |
 | **Data Lake** | Apache Parquet | Date-partitioned columnar storage |
 | **ETL Pipeline** | Python (custom framework) | Extract, Transform, Load with quality gates |
 | **Data Warehouse** | DuckDB (star schema) | Kimball dimensional model with fact + dim tables |
-| **Data Quality** | Custom DQ framework | 17+ automated checks (completeness, uniqueness, freshness, RI) |
+| **Data Quality** | Custom DQ framework (config-driven) | 17+ automated checks with configurable thresholds |
 | **Analytics** | SQL + Python | Engagement, Growth, Retention analytics modules |
 | **Visualization** | Plotly / Dash | 7 interactive dashboard panels |
+| **Configuration** | YAML + config loader | Centralized pipeline settings (`pipeline_config.yaml`) |
 | **Orchestration** | Apache Airflow DAG | Production-ready daily pipeline with quality gates |
-| **Testing** | pytest | 30+ unit/integration tests |
+| **Testing** | pytest | 60 unit/integration/edge-case tests |
 
 ---
 
@@ -42,34 +58,48 @@ Data Lake (Parquet)  →  ETL Pipeline  →  Star Schema (DuckDB)  →  Analytic
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/meta-product-analytics-pipeline.git
-cd meta-product-analytics-pipeline
+git clone https://github.com/bobaoxu2001/DE-project-meta.git
+cd DE-project-meta/meta-product-analytics-pipeline
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+# Create virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
+> **Note**: `great-expectations` and `apache-airflow` have a version conflict with `pandas==2.2.3`. If you encounter installation errors, install them separately:
+> ```bash
+> pip install duckdb==1.1.3 pandas==2.2.3 numpy==1.26.4 plotly==5.24.1 dash==2.18.2 pyyaml==6.0.2 faker==30.8.2 pyarrow==18.1.0 pytest==8.3.4 scipy==1.14.1 kaleido==0.2.1
+> pip install great-expectations==1.2.1 --no-deps
+> pip install apache-airflow==2.10.4 --no-deps
+> ```
+
 ### Run the Full Pipeline
 
 ```bash
-# Generate data + ETL + Analytics + Dashboards (default: 5K users, 30 days)
-python run_pipeline.py
+# Generate data + ETL + Analytics + Dashboards (defaults from pipeline_config.yaml)
+python3 run_pipeline.py
 
-# Smaller demo for quick testing
-python run_pipeline.py --users 1000 --days 7
+# Quick demo (500 users, 7 days, ~21K events, ~1.3s)
+python3 run_pipeline.py --users 500 --days 7
 
 # Skip visualization generation
-python run_pipeline.py --skip-viz
+python3 run_pipeline.py --users 1000 --days 7 --skip-viz
 ```
 
 ### Run Tests
 
 ```bash
-pytest tests/ -v
+# Full test suite (60 tests)
+python3 -m pytest tests/ -v
+
+# Run specific test modules
+python3 -m pytest tests/test_etl.py -v           # ETL pipeline tests
+python3 -m pytest tests/test_data_quality.py -v   # Data quality tests
+python3 -m pytest tests/test_analytics.py -v      # Analytics module tests
+python3 -m pytest tests/test_edge_cases.py -v     # Edge case tests
 ```
 
 ### Explore in Jupyter
@@ -86,27 +116,29 @@ jupyter notebook notebooks/product_analytics_exploration.ipynb
 meta-product-analytics-pipeline/
 │
 ├── README.md                          # This file
-├── requirements.txt                   # Python dependencies
+├── requirements.txt                   # Python dependencies (13 packages)
 ├── run_pipeline.py                    # One-command pipeline runner
 │
 ├── config/
-│   └── pipeline_config.yaml           # Pipeline configuration
+│   └── pipeline_config.yaml           # Centralized pipeline configuration
 │
 ├── src/
+│   ├── config.py                      # Configuration loader (cached YAML access)
+│   │
 │   ├── data_generation/
-│   │   └── generate_events.py         # Synthetic data generator (users + events)
+│   │   └── generate_events.py         # Vectorized synthetic data generator
 │   │
 │   ├── etl/
 │   │   ├── extract.py                 # Extract from data lake (Parquet)
 │   │   ├── transform.py               # Clean, validate, build dimensions & facts
-│   │   ├── load.py                    # Load into DuckDB warehouse
-│   │   └── pipeline.py                # End-to-end orchestrator
+│   │   ├── load.py                    # Load into DuckDB warehouse (register-based)
+│   │   └── pipeline.py                # End-to-end orchestrator (full + incremental)
 │   │
 │   ├── models/
-│   │   └── schema.py                  # Warehouse schema manager
+│   │   └── schema.py                  # Warehouse schema manager (DDL + seeding)
 │   │
 │   ├── data_quality/
-│   │   └── checks.py                  # 17+ automated DQ checks
+│   │   └── checks.py                  # 17+ automated DQ checks (config-driven)
 │   │
 │   ├── analytics/
 │   │   ├── engagement.py              # DAU/WAU/MAU, stickiness, cross-platform
@@ -114,11 +146,11 @@ meta-product-analytics-pipeline/
 │   │   └── retention.py               # Cohort retention, churn prediction
 │   │
 │   └── visualization/
-│       └── dashboards.py              # Interactive Plotly dashboards
+│       └── dashboards.py              # 7 Plotly dashboard panels (config-driven)
 │
 ├── sql/
-│   ├── create_tables.sql              # Star schema DDL
-│   ├── etl_queries.sql                # ETL transformation SQL
+│   ├── create_tables.sql              # Star schema DDL (8 tables + indexes)
+│   ├── etl_queries.sql                # Dimension seeding + analytical transforms
 │   └── analytics_queries.sql          # Advanced analytical queries
 │
 ├── airflow/
@@ -129,9 +161,10 @@ meta-product-analytics-pipeline/
 │   └── product_analytics_exploration.ipynb  # Interactive analysis
 │
 ├── tests/
-│   ├── test_etl.py                    # ETL pipeline tests
-│   ├── test_data_quality.py           # DQ framework tests
-│   └── test_analytics.py             # Analytics module tests
+│   ├── test_etl.py                    # ETL pipeline tests (23 tests)
+│   ├── test_data_quality.py           # DQ framework tests (7 tests)
+│   ├── test_analytics.py              # Analytics module tests (10 tests)
+│   └── test_edge_cases.py             # Edge case + boundary tests (20 tests)
 │
 └── docs/
     ├── architecture.md                # System architecture
@@ -149,6 +182,23 @@ The warehouse uses a **Kimball-style star schema** with:
 - **Fact table**: `fct_events` — one row per user interaction event (millions of rows)
 - **Dimensions**: `dim_users` (SCD-2), `dim_date`, `dim_platform`, `dim_event_type`
 - **Aggregates**: `agg_daily_metrics`, `agg_user_engagement`, `agg_retention_cohorts`
+
+```
+                    ┌─────────────┐
+                    │  dim_date   │
+                    │  (730 rows) │
+                    └──────┬──────┘
+                           │
+┌──────────────┐    ┌──────┴───────┐    ┌────────────────┐
+│ dim_platform │    │  fct_events  │    │ dim_event_type │
+│  (5 rows)    │◄───│  (millions)  │───►│  (15 rows)     │
+└──────────────┘    └──────┬───────┘    └────────────────┘
+                           │
+                    ┌──────┴──────┐
+                    │  dim_users  │
+                    │  (SCD-2)    │
+                    └─────────────┘
+```
 
 See [docs/data_model.md](docs/data_model.md) for the full schema documentation.
 
@@ -175,13 +225,54 @@ See [docs/data_model.md](docs/data_model.md) for the full schema documentation.
 - **Churn risk scoring** with ML-ready features
 
 ### 4. Data Quality
-- **17+ automated checks** covering:
+- **17+ automated checks** with configurable thresholds (`pipeline_config.yaml`):
   - Completeness (null rates)
   - Uniqueness (duplicate detection)
   - Freshness (data recency)
   - Referential integrity (FK validation)
   - Value ranges (anomaly detection)
   - Volume (row count thresholds)
+
+---
+
+## Dashboard Panels
+
+7 interactive Plotly charts generated to `data/processed/charts/`:
+
+| Panel | Chart Type | Description |
+|-------|------------|-------------|
+| DAU Trend | Bar + Line | Daily active users with 7-day moving average |
+| Platform Comparison | Bar + Donut | Side-by-side metrics across 5 platforms |
+| Engagement Funnel | Funnel | View → Like → Comment → Share → Create |
+| Retention Heatmap | Heatmap | Weekly cohort retention matrix (configurable platform) |
+| Growth Accounting | Stacked Area | DAU composition (new / retained / resurrected) |
+| Geographic Map | Choropleth | User distribution by country |
+| Engagement Distribution | Histogram | Score distribution by user segment |
+
+---
+
+## Configuration
+
+The pipeline is centrally configured via `config/pipeline_config.yaml`:
+
+| Section | Key settings |
+|---------|-------------|
+| `database` | DuckDB warehouse path and schema name |
+| `data_generation` | Default user count, days, platforms, event types |
+| `etl` | Batch size, parallel workers, retry settings |
+| `data_quality` | Null threshold, duplicate threshold, freshness window, min row counts |
+| `analytics` | Retention windows, cohort period, growth metrics |
+| `visualization` | Dashboard port, Plotly theme, refresh interval |
+| `logging` | Log level, format, file path |
+
+Access config values programmatically:
+```python
+from src import config as cfg
+
+db_path = cfg.get("database", "path")
+dq_threshold = cfg.get("data_quality", "null_threshold", default=0.01)
+retention_days = cfg.get("analytics", "retention_windows")
+```
 
 ---
 
@@ -198,49 +289,15 @@ The `sql/` directory contains production-quality analytical queries:
 
 ---
 
-## Dashboard Panels
+## Performance
 
-| Panel | Description |
-|-------|-------------|
-| DAU Trend | Daily active users with 7-day moving average |
-| Platform Comparison | Side-by-side metrics across 5 platforms |
-| Engagement Funnel | View → Like → Comment → Share → Create |
-| Retention Heatmap | Weekly cohort retention matrix |
-| Growth Accounting | DAU composition (new/retained/resurrected) |
-| Geographic Map | User distribution by country |
-| Engagement Distribution | Score histogram by user segment |
-
----
-
-## Configuration
-
-The pipeline is configured via `config/pipeline_config.yaml`:
-
-| Section | Key settings |
-|---------|-------------|
-| `database` | DuckDB warehouse path and schema name |
-| `data_generation` | Default user count, days, platforms, event types |
-| `etl` | Batch size, parallel workers, retry settings |
-| `data_quality` | Null threshold, duplicate threshold, freshness window, min row counts |
-| `analytics` | Retention windows, cohort period, growth metrics |
-| `visualization` | Dashboard port, Plotly theme, refresh interval |
-| `logging` | Log level, format, file path |
-
-Access config values programmatically:
-```python
-from src import config as cfg
-db_path = cfg.get("database", "path")
-dq_threshold = cfg.get("data_quality", "null_threshold", default=0.01)
-```
-
----
-
-## Performance Notes
-
-- **Event generation** uses vectorized NumPy operations (no `iterrows()`)
-- **Daily aggregates** computed with pandas `groupby().agg()` instead of manual loops
-- **DuckDB** provides columnar storage with automatic query optimization
-- Pipeline processes 500 users x 7 days (~21K events) in ~1.3s
+| Metric | Value |
+|--------|-------|
+| 500 users × 7 days pipeline | ~1.3s end-to-end |
+| Event generation | Vectorized NumPy (no `iterrows()`) |
+| Daily aggregates | Vectorized `groupby().agg()` |
+| DuckDB queries | Columnar storage with auto-optimization |
+| Test suite (60 tests) | ~5.5s |
 
 ---
 
@@ -254,7 +311,27 @@ dq_threshold = cfg.get("data_quality", "null_threshold", default=0.01)
 | **SCD Type 2** for users | Tracks historical changes; demonstrates data modeling depth |
 | **Custom DQ framework** | Shows understanding of data quality principles beyond just using a library |
 | **Incremental ETL** | Partition-based idempotent loads; production-ready pattern |
+| **Vectorized data gen** | NumPy array ops instead of row-by-row loops for scalability |
+| **Config-driven thresholds** | DQ checks and pipeline defaults from YAML, not hardcoded |
 | **Airflow DAG** | Industry-standard orchestration with quality gates and alerting |
+
+---
+
+## Sample Pipeline Output
+
+```
+============================================================
+  PRODUCT ANALYTICS PIPELINE — COMPLETE
+============================================================
+  Users generated:    500
+  Days of data:       7
+  Total events:       21,186
+  Data quality:       100.0% (17/17 checks passed)
+  Total time:         1.24s
+  Warehouse:          data/warehouse/product_analytics.duckdb
+  Charts:             data/processed/charts/
+============================================================
+```
 
 ---
 
