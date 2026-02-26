@@ -10,6 +10,8 @@ import os
 import time
 from datetime import datetime, timezone
 
+import duckdb
+
 from src.data_quality.checks import DataQualityChecker
 from src.etl.extract import Extractor
 from src.etl.load import Loader
@@ -105,8 +107,8 @@ class ProductAnalyticsPipeline:
         ]:
             try:
                 warehouse.conn.execute(f"DELETE FROM {tbl}")
-            except Exception:
-                pass
+            except duckdb.CatalogException:
+                pass  # Table may not exist on first run
 
         loader.load_dimension(user_dim, "analytics.dim_users", mode="replace")
         loader.load_facts(fact_events, "analytics.fct_events")

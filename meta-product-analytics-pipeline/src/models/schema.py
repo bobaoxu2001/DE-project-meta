@@ -9,6 +9,7 @@ import logging
 import os
 
 import duckdb
+from duckdb import CatalogException, ParserException
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class WarehouseSchema:
             if stmt:
                 try:
                     self.conn.execute(stmt)
-                except Exception as e:
+                except (CatalogException, ParserException) as e:
                     logger.warning("DDL statement skipped: %s — %s", stmt[:80], e)
 
         logger.info("Schema initialized successfully.")
@@ -84,7 +85,7 @@ class WarehouseSchema:
                     if stmt and "INSERT" in stmt.upper():
                         try:
                             self.conn.execute(stmt)
-                        except Exception as e:
+                        except (CatalogException, ParserException) as e:
                             logger.warning("Seed statement warning: %s", e)
 
         logger.info("Dimension tables seeded.")

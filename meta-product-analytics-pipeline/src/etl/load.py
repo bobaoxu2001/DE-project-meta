@@ -9,6 +9,7 @@ import logging
 from typing import Literal
 
 import duckdb
+from duckdb import CatalogException, ParserException
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -166,7 +167,7 @@ class Loader:
             try:
                 self.conn.execute(stmt)
                 logger.debug("Statement %d executed successfully", i + 1)
-            except Exception as e:
+            except (CatalogException, ParserException) as e:
                 logger.warning("Statement %d failed: %s", i + 1, e)
 
     def verify_load(self, table_name: str) -> dict:
