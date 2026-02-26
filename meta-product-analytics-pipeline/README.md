@@ -212,6 +212,38 @@ The `sql/` directory contains production-quality analytical queries:
 
 ---
 
+## Configuration
+
+The pipeline is configured via `config/pipeline_config.yaml`:
+
+| Section | Key settings |
+|---------|-------------|
+| `database` | DuckDB warehouse path and schema name |
+| `data_generation` | Default user count, days, platforms, event types |
+| `etl` | Batch size, parallel workers, retry settings |
+| `data_quality` | Null threshold, duplicate threshold, freshness window, min row counts |
+| `analytics` | Retention windows, cohort period, growth metrics |
+| `visualization` | Dashboard port, Plotly theme, refresh interval |
+| `logging` | Log level, format, file path |
+
+Access config values programmatically:
+```python
+from src import config as cfg
+db_path = cfg.get("database", "path")
+dq_threshold = cfg.get("data_quality", "null_threshold", default=0.01)
+```
+
+---
+
+## Performance Notes
+
+- **Event generation** uses vectorized NumPy operations (no `iterrows()`)
+- **Daily aggregates** computed with pandas `groupby().agg()` instead of manual loops
+- **DuckDB** provides columnar storage with automatic query optimization
+- Pipeline processes 500 users x 7 days (~21K events) in ~1.3s
+
+---
+
 ## Technical Decisions
 
 | Decision | Rationale |
