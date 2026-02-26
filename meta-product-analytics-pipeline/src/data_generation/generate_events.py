@@ -210,65 +210,83 @@ class EventGenerator:
         self.hour_probs = hour_weights / hour_weights.sum()
 
     def _events_for_day(self, date: datetime) -> pd.DataFrame:
-        """Generate all events for a single day."""
+        """Generate all events for a single day using vectorized operations."""
         dow = date.weekday()
         dow_weight = _day_of_week_weight(dow)
+        date_str = date.strftime("%Y%m%d")
 
-        records = []
-        for _, user in self.users_df.iterrows():
-            segment = user["user_segment"]
-            lo, hi = self.SEGMENT_ACTIVITY[segment]
+        segments = self.users_df["user_segment"].values
+        lo_arr = np.array([self.SEGMENT_ACTIVITY[s][0] for s in segments])
+        hi_arr = np.array([self.SEGMENT_ACTIVITY[s][1] for s in segments])
 
-            # Scale by day-of-week
-            scaled_hi = int(hi * dow_weight / 0.14)
-            n_events = self.rng.integers(lo, max(lo + 1, scaled_hi + 1))
+        scaled_hi = (hi_arr * dow_weight / 0.14).astype(int)
+        hi_bound = np.maximum(lo_arr + 1, scaled_hi + 1)
+        n_events_arr = np.array([
+            self.rng.integers(lo, hi) for lo, hi in zip(lo_arr, hi_bound)
+        ])
 
-            if n_events == 0:
-                continue
+        active_mask = n_events_arr > 0
+        if not active_mask.any():
+            return pd.DataFrame()
 
-            # Pick event types
-            events = self.rng.choice(
-                self.event_names, size=n_events, p=self.event_probs
+        active_users = self.users_df[active_mask]
+        active_counts = n_events_arr[active_mask]
+        total_events = int(active_counts.sum())
+
+        user_ids = np.repeat(active_users["user_id"].values, active_counts)
+        countries = np.repeat(active_users["country"].values, active_counts)
+        device_types = np.repeat(active_users["device_type"].values, active_counts)
+        primary_platforms = np.repeat(
+            active_users["primary_platform"].values, active_counts
+        )
+
+        event_types = self.rng.choice(
+            self.event_names, size=total_events, p=self.event_probs
+        )
+        hours = self.rng.choice(24, size=total_events, p=self.hour_probs)
+        minutes = self.rng.integers(0, 60, size=total_events)
+        seconds = self.rng.integers(0, 60, size=total_events)
+
+        # Platform: 70% primary, 30% random
+        use_primary = self.rng.random(total_events) < 0.70
+        random_platforms = self.rng.choice(PLATFORMS, size=total_events)
+        platforms = np.where(use_primary, primary_platforms, random_platforms)
+
+        # Build per-user event indices for unique event_id generation
+        event_indices = np.concatenate([
+            np.arange(n) for n in active_counts
+        ])
+
+        # Vectorized hash computation
+        event_ids = np.array([
+            hashlib.md5(
+                f"{uid}_{date.replace(hour=int(h), minute=int(m), second=int(s)).isoformat()}_{idx}".encode()
+            ).hexdigest()
+            for uid, h, m, s, idx in zip(
+                user_ids, hours, minutes, seconds, event_indices
             )
+        ])
 
-            # Pick hours weighted by usage pattern
-            hours = self.rng.choice(
-                24, size=n_events,
-                p=self.hour_probs,
-            )
-            minutes = self.rng.integers(0, 60, size=n_events)
-            seconds = self.rng.integers(0, 60, size=n_events)
+        session_ids = np.array([
+            hashlib.md5(f"{uid}_{date_str}_{h}".encode()).hexdigest()[:12]
+            for uid, h in zip(user_ids, hours)
+        ])
 
-            # Decide platform: 70 % primary, 30 % random
-            platforms = []
-            for _ in range(n_events):
-                if self.rng.random() < 0.70:
-                    platforms.append(user["primary_platform"])
-                else:
-                    platforms.append(self.rng.choice(PLATFORMS))
+        timestamps = pd.array([
+            date.replace(hour=int(h), minute=int(m), second=int(s))
+            for h, m, s in zip(hours, minutes, seconds)
+        ])
 
-            for i in range(n_events):
-                ts = date.replace(
-                    hour=int(hours[i]),
-                    minute=int(minutes[i]),
-                    second=int(seconds[i]),
-                )
-                records.append({
-                    "event_id": hashlib.md5(
-                        f"{user['user_id']}_{ts.isoformat()}_{i}".encode()
-                    ).hexdigest(),
-                    "user_id": user["user_id"],
-                    "event_type": events[i],
-                    "platform": platforms[i],
-                    "event_timestamp": ts,
-                    "country": user["country"],
-                    "device_type": user["device_type"],
-                    "session_id": hashlib.md5(
-                        f"{user['user_id']}_{date.strftime('%Y%m%d')}_{hours[i]}".encode()
-                    ).hexdigest()[:12],
-                })
-
-        return pd.DataFrame(records)
+        return pd.DataFrame({
+            "event_id": event_ids,
+            "user_id": user_ids,
+            "event_type": event_types,
+            "platform": platforms,
+            "event_timestamp": timestamps,
+            "country": countries,
+            "device_type": device_types,
+            "session_id": session_ids,
+        })
 
     def generate(self, output_dir: str = "data/raw/events") -> str:
         """Generate events for the full date range and write Parquet files.
